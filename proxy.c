@@ -39,6 +39,29 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+// modify response to change Stockholm to Linkoping and Smiley to Trolly
+// must change all occurences
+void modifyResponse(char *res) {
+    char *stockholm = "Stockholm";
+    char *linkoping = "Linkoping";
+    char *smiley = "Smiley";
+    char *trolly = "Trolly";
+
+    // replace all occurences of stockholm with linkoping
+    char *pos = strstr(res, stockholm);
+    while (pos != NULL) {
+        memcpy(pos, linkoping, strlen(linkoping));
+        pos = strstr(pos + strlen(linkoping), stockholm);
+    }
+
+    // replace all occurences of smiley with trolly
+    pos = strstr(res, smiley);
+    while (pos != NULL) {
+        memcpy(pos, trolly, strlen(trolly));
+        pos = strstr(pos + strlen(trolly), smiley);
+    }
+}
+
 // get host from request
 int parseRequest(char *request, char *host, char *port, char *path) {
     // request form :
@@ -91,9 +114,9 @@ int parseRequest(char *request, char *host, char *port, char *path) {
 
 // transferRequest takes the request buffer sent by the client and sends it to the server
 // it then receives the response from the server and sends it back to the client
-void transferRequest(char *request, char *host, char *port, char *path, char *res) {
-    printf("Transfering request to : \n");
-    printf("host: %s, port: %s, path: %s\n", host, port, path);
+void transferRequest(char *request, char *host, char *port, char *path, char *res, int sockfd_client) {
+    printf("[TRANSFER] Transfering request to : \n");
+    printf("[TRANSFER] host: %s, port: %s, path: %s\n", host, port, path);
 
     // create a socket
     int sockfd;
@@ -146,27 +169,30 @@ void transferRequest(char *request, char *host, char *port, char *path, char *re
     int total_bytes = 0;
     int numbytes;
 
-    while ((numbytes = recv(sockfd, response + total_bytes, BUF_SIZE - total_bytes - 1, 0)) > 0) {
+    // receive the response from the server and send it to the client at the same time
+    while ((numbytes = recv(sockfd, response, BUF_SIZE-1, 0)) > 0) {
+        // if we are able to receive the response
         total_bytes += numbytes;
-        printf("client: received %d bytes\n", numbytes);
+        response[numbytes] = '\0';
 
-        // check if we have received the whole response
-        if (strstr(response, "\r\r") != NULL) {
-            printf("client: received the whole response\n");
-            break;
+        modifyResponse(response);
+
+        // send the response to the client
+        if (send(sockfd_client, response, strlen(response), 0) == -1) {
+            // if we are unable to send the response to the client
+            perror("send");
+            exit(1);
         }
     }
 
     if (numbytes == -1) {
-    perror("recv");
-    exit(1);
+        perror("recv");
+        exit(1);
     }
 
     response[total_bytes] = '\0';
 
     // response now contains the full response from the server
-
-    // printf("client: received '%s'\n", response);
 
     strcpy(res, response);
 
@@ -268,8 +294,6 @@ int main(void)
 
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            // if (send(new_fd, "Hello, world!", 13, 0) == -1)
-            //     perror("send");
             
             // print the request
             char buf[1000];
@@ -289,17 +313,15 @@ int main(void)
             char port[1000];
             char path[1000];
 
-            printf("server : parsing request...\n");
-
             parseRequest(buf, host, port, path);
 
             char *res = (char *)malloc(2000);
 
-            printf("server : sending request to %s:%s%s...\n", host, port, path);
+            printf("[FORK %s] server : request is %s:%s/%s...\n", path, host, port, path);
 
-            transferRequest(request, host, port, path, res);
+            transferRequest(request, host, port, path, res, new_fd);
 
-            printf("server : sending response to client...\n");
+            printf("[FORK %s] server : sending response to client...\n", path);
 
             // send back res to client
             if (send(new_fd, res, strlen(res), 0) == -1) {
@@ -308,7 +330,7 @@ int main(void)
                 exit(1);
             }
 
-            printf("server : sent response to client.\n");
+            printf("[FORK %s] server : sent response to client.\n", path);
 
             close(new_fd);
             exit(0);
