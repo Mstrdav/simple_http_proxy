@@ -103,7 +103,7 @@ int parseRequest(char *request, char *host, char *port, char *path) {
     // get the path
     char *temp = strtok(line1, "/");
     char *temp2 = strtok(NULL, "/");
-    char *path_with_suffix = strtok(NULL, "/");
+    char *path_with_suffix = strtok(NULL, " ");
     char *path_found = strtok(path_with_suffix, " ");
     strcpy(path, path_found);
 
@@ -173,7 +173,9 @@ void transferRequest(char *request, char *host, char *port, char *path, char *re
     while ((numbytes = recv(sockfd, response, BUF_SIZE-1, 0)) > 0) {
         // if we are able to receive the response
         total_bytes += numbytes;
-        response[numbytes] = '\0';
+
+        // debug
+        printf("response: %s\n", response);
 
         modifyResponse(response);
 
@@ -184,6 +186,8 @@ void transferRequest(char *request, char *host, char *port, char *path, char *re
             exit(1);
         }
     }
+
+    response[numbytes] = '\0';
 
     if (numbytes == -1) {
         perror("recv");
@@ -319,9 +323,14 @@ int main(void)
 
             printf("[FORK %s] server : request is %s:%s/%s...\n", path, host, port, path);
 
-            transferRequest(request, host, port, path, res, new_fd);
-
-            printf("[FORK %s] server : sending response to client...\n", path);
+            // if path is favicon.ico, send back a 404
+            if (strcmp(path, "favicon.ico") == 0) {
+                strcpy(res, "HTTP/1.1 404 Not Found\r\n\r");
+                printf("favicon.ico requested, sending 404\r");
+            } else {
+                transferRequest(request, host, port, path, res, new_fd);
+                printf("[FORK %s] server : sending response to client...\n", path);
+            }
 
             // send back res to client
             if (send(new_fd, res, strlen(res), 0) == -1) {
