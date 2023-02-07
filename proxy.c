@@ -42,10 +42,13 @@ void *get_in_addr(struct sockaddr *sa)
 // modify response to change Stockholm to Linkoping and Smiley to Trolly
 // must change all occurences
 void modifyResponse(char *res) {
-    char *stockholm = "Stockholm";
-    char *linkoping = "Linkoping";
+    char *stockholm = " Stockholm";
+    char *linkoping = " Linkoping";
     char *smiley = "Smiley";
     char *trolly = "Trolly";
+    char *smiley_url = "smiley.jpg";
+    char *trolly_url = "trolly.jpg";
+
 
     // replace all occurences of stockholm with linkoping
     char *pos = strstr(res, stockholm);
@@ -59,6 +62,13 @@ void modifyResponse(char *res) {
     while (pos != NULL) {
         memcpy(pos, trolly, strlen(trolly));
         pos = strstr(pos + strlen(trolly), smiley);
+    }
+
+    // replace all occurences of smiley_url with trolly_url
+    pos = strstr(res, smiley_url);
+    while (pos != NULL) {
+        memcpy(pos, trolly_url, strlen(trolly_url));
+        pos = strstr(pos + strlen(trolly_url), smiley_url);
     }
 }
 
@@ -174,15 +184,23 @@ void transferRequest(char *request, char *host, char *port, char *path, char *re
         // if we are able to receive the response
         total_bytes += numbytes;
 
-        // debug
-        printf("response: %s\n", response);
-
         modifyResponse(response);
 
         // send the response to the client
-        if (send(sockfd_client, response, strlen(response), 0) == -1) {
+        if (send(sockfd_client, response, numbytes, 0) == -1) {
             // if we are unable to send the response to the client
             perror("send");
+            exit(1);
+        }
+
+        if (numbytes == 0) {
+            // if we are done receiving the response
+            break;
+        }
+
+        if (numbytes == -1) {
+            // if we are unable to receive the response
+            perror("recv");
             exit(1);
         }
     }
